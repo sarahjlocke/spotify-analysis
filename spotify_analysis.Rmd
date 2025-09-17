@@ -1,0 +1,232 @@
+---
+title: "Final Project Report: An Analysis of Tempo Trends in Pop vs. All Other Genres"
+author: "Nils Matteson, Jisu Kim, Sarah Locke, Henry Banner"
+date: "2025-08-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# This setup chunk loads all necessary packages and sets global options.
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+library(tidyverse)
+library(ggplot2)
+```
+
+### Introduction
+
+In 2017, a *Rolling Stone* article posed a question that captured a palpable shift in the music landscape: "How Did Pop Music Get So Slow?"^[ "How Did Pop Music Get So Slow?," *Rolling Stone*, October 23, 2017. Available at: https://www.rollingstone.com/pro/features/how-did-pop-music-get-so-slow-197794/] The piece noted that the euphoric, high-BPM dance-pop of the early decade had given way to what it called "trap's woozy tempos" and a more subdued, atmospheric sound. This project moves beyond cultural observation to investigate this perceived slowdown with quantitative rigor. Using a song's tempo, its most fundamental attribute for dictating energy and feel, we answer the question: How has the tempo of pop music changed over the last decade, and is this trend unique when compared to other popular genres?
+
+Our analysis of over 600 Spotify "top hits" from 2010 to 2019 reveals two compelling conclusions. First, we provide statistical evidence that the average tempo of mainstream pop music did, in fact, decline significantly. Second, we find this trend to be isolated; a broad sample of other popular genres showed no such change. This suggests the "slowing down" of popular music is not a widespread phenomenon, but rather a pop-specific evolution, likely driven by the distinct stylistic and economic pressures of the streaming era. This report will detail our data source, analytical methods, and the interpretation of these findings.
+
+
+
+### Background
+
+For this project, we used the "Top Spotify Songs from 2010-2019" dataset from Kaggle, compiled by Leonardo Pena.^[The data can be found at: https://www.kaggle.com/datasets/leonardopena/top-spotify-songs-from-20102019-by-year] The data's primary source is Spotify's public API, which uses proprietary algorithms to analyze audio features. The dataset includes 603 tracks identified as "top hits." While the exact criteria for this label are not specified, it is likely based on high streaming numbers, so we treat this dataset as a representative sample of commercially successful, primarily Western, music.
+
+To create a statistically meaningful comparison, we categorized songs into two groups: 'Pop' and 'All Other Genres.' An initial plan to compare pop with a single genre was hampered by data imbalances noted during peer review. Our revised framework provides a more robust basis for comparison, allowing us to test whether the observed trend in pop is unique or part of a broader change across all popular music, as illustrated below.
+
+
+```{r show-genre-counts}
+songs <- read.csv("top10s.csv")
+
+# Defines the "Pop" group
+pop_genres <- songs %>%
+  filter(str_detect(top.genre, regex("pop", ignore_case = TRUE))) %>%
+  filter(!str_detect(top.genre, regex("hip hop", ignore_case = TRUE))) %>%
+  mutate(genre_group = "Pop")
+
+# Defines the "All Other" group
+other_genres <- songs %>%
+  filter(!str_detect(top.genre, regex("pop", ignore_case = TRUE)) | str_detect(top.genre, regex("hip hop", ignore_case = TRUE))) %>%
+  mutate(genre_group = "All Other")
+
+# Binds them together for analysis
+pop_vs_other <- bind_rows(pop_genres, other_genres)
+
+genre_counts <- pop_vs_other %>%
+  group_by(year, genre_group) %>%
+  summarise(n = n(), .groups = 'drop') 
+
+# Display the table
+genre_counts %>%
+  pivot_wider(names_from = genre_group, values_from = n, values_fill = 0) %>%
+  arrange(year) %>%
+  knitr::kable(caption = "Table 1: Number of Songs per Group by Year.")
+
+# Display the bar chart
+ggplot(genre_counts, aes(x = year, y = n, fill = genre_group)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Figure 1: Song Count by Group",
+    subtitle = "The 'All Other' group provides a more robust sample for comparison.",
+    x = "Year",
+    y = "Number of Songs",
+    fill = "Group"
+  ) +
+  scale_x_continuous(breaks = seq(2010, 2019, 1)) +
+  theme_minimal()
+```
+
+### Analysis
+
+```{r data-preparation, include=FALSE}
+# This chunk performs all data preparation for the analysis that follows.
+
+# Calculate average BPM, count, and standard error of the mean (SEM) per group per year
+genre_year_avg <- pop_vs_other %>%
+  group_by(genre_group, year) %>%
+  summarise(
+    mean_bpm = mean(bpm),
+    n = n(),
+    sem = sd(bpm) / sqrt(n()),
+    .groups = 'drop'
+  )
+
+# T-test Data Prep
+pop_bpm_2010 <- pop_genres %>% filter(year == 2010) %>% pull(bpm)
+pop_bpm_2019 <- pop_genres %>% filter(year == 2019) %>% pull(bpm)
+
+other_bpm_2010 <- other_genres %>% filter(year == 2010) %>% pull(bpm)
+other_bpm_2019 <- other_genres %>% filter(year == 2019) %>% pull(bpm)
+
+```
+
+#### Graphical and Numerical Summaries
+
+To visualize the trend, we plotted the average BPM for both groups across the decade (Figure 2). The shaded ribbons represent the standard error of the mean, illustrating the statistical uncertainty around the average each year. The graph shows a clear visual distinction: the line for Pop trends downward, while the line for All Other Genres remains relatively flat.
+
+Numerically, the trends are distinct. For pop music, the average BPM dropped from **124.07** in 2010 to **111.67** in 2019. In contrast, the average for the "All Other Genres" group changed negligibly, from **107.0** in 2010 to **114.1** in 2019. The following inferential tests will determine the statistical significance of these changes.
+
+
+
+```{r graphical-analysis}
+
+ggplot(genre_year_avg, aes(x = year, y = mean_bpm, color = genre_group, fill = genre_group)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2.5) +
+  geom_ribbon(aes(ymin = mean_bpm - sem, ymax = mean_bpm + sem), alpha = 0.2, linetype = "dotted") +
+  labs(
+    title = "Figure 2: Average BPM Over Time: Pop vs. All Other Genres",
+    subtitle = "Data from Spotify's API, sourced via Kaggle.",
+    x = "Year",
+    y = "Average BPM",
+    color = "Group",
+    fill = "Group"
+  ) +
+  scale_x_continuous(breaks = seq(2010, 2019, 1)) +
+  theme_minimal()
+
+
+```
+
+
+To determine if these observed changes are statistically significant, we performed a Welch Two-Sample t-test for each group, comparing the start of the decade (2010) to the end (2019). We chose the Welch test because it does not assume equal variances between samples, making it a robust choice for our data. We used a significance level of α = 0.05.
+
+**1. Pop Music (2010 vs. 2019)**
+
+**Conclusion:** The test was statistically significant. We reject the null hypothesis, as the average tempo of top pop songs was significantly lower in 2019 than in 2010 (*t*(53.4) = 2.28, *p* = 0.026). The 95% confidence interval for the difference in means [1.50, 23.30] does not contain zero, supporting this conclusion.
+
+```{r pop-ttest}
+
+t.test(pop_bpm_2010, pop_bpm_2019)
+
+```
+
+
+**2. All Other Genres (2010 vs. 2019)**
+
+**Conclusion:** The test was not statistically significant. We fail to reject the null hypothesis, as there is insufficient evidence to conclude that the average tempo for non-pop genres changed significantly over the decade (*t*(11.3) = -0.62, *p* = 0.55). The 95% confidence interval [-32.41, 18.21] contains zero, consistent with this result.
+
+
+```{r other-ttest}
+
+t.test(other_bpm_2010, other_bpm_2019)
+
+```
+
+### Discussion
+
+Our analysis reveals a compelling, genre-specific trend: the average tempo of top pop songs dropped significantly between 2010 and 2019. This finding provides statistical backing for the common perception of pop becoming more "chill." This shift likely reflects broader cultural and technological changes. The rise of streaming and the dominance of mood-based playlists (e.g., 'Chill Hits,' 'Study Beats') may have incentivized the production of lower-tempo, more atmospheric tracks that perform well in a "background listening" context.
+
+However, our most interesting finding is that this trend appears to be exclusive to pop. In stark contrast to the pop category, our analysis of the consolidated "All Other Genres" group did not find a significant change in tempo. This indicates that the "slowing down" of music is not a widespread phenomenon across the entire popular music landscape in our dataset, but rather a development localized within the pop genre.
+
+The primary limitation of this study is the heterogeneous nature of the "All Other Genres" category. This group is a mix of many different styles, and its average BPM may not be as musically meaningful as the average for a single genre. Furthermore, the statistical power of our test for this group is limited by a very small sample size in the starting year (n=6 in 2010). With such a small sample, it is difficult to detect a true effect even if one exists. For future work, it would be valuable to analyze the genres within the "All Other" group individually and repeat the analysis with a larger, more balanced dataset.
+
+In summary, our analysis provides strong evidence that top pop songs became significantly slower over the last decade. Crucially, we found no such evidence for other genres, suggesting this is a genre-specific shift in music production and listener preference within pop, rather than a broad change across all popular music.
+
+
+### Appendix: Full R Code for Reproducibility
+
+```{r appendix-code, echo=TRUE, eval=FALSE}
+
+# This chunk contains all the code used in the analysis for full reproducibility.
+# eval=FALSE prevents this code from running and cluttering the final report.
+
+# Load Libraries
+library(tidyverse)
+library(ggplot2)
+
+# Load Data
+songs <- read.csv("top10s.csv")
+
+# --- Data Grouping ---
+# Defines the "Pop" group
+pop_genres <- songs %>%
+  filter(str_detect(top.genre, regex("pop", ignore_case = TRUE))) %>%
+  filter(!str_detect(top.genre, regex("hip hop", ignore_case = TRUE))) %>%
+  mutate(genre_group = "Pop")
+
+# Defines the "All Other" group
+other_genres <- songs %>%
+  filter(!str_detect(top.genre, regex("pop", ignore_case = TRUE)) | str_detect(top.genre, regex("hip hop", ignore_case = TRUE))) %>%
+  mutate(genre_group = "All Other")
+
+# Binds them together for analysis
+pop_vs_other <- bind_rows(pop_genres, other_genres)
+
+# --- Genre Count Table and Graph Code ---
+genre_counts <- pop_vs_other %>%
+  group_by(year, genre_group) %>%
+  summarise(n = n(), .groups = 'drop') 
+
+knitr::kable(genre_counts, caption = "Song Counts per Group by Year.")
+
+ggplot(genre_counts, aes(x = year, y = n, fill = genre_group)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Figure 1: Song Count by Group")
+
+# --- Main Analysis Code ---
+# Calculate average BPM and standard error of the mean (SEM)
+genre_year_avg <- pop_vs_other %>%
+  group_by(genre_group, year) %>%
+  summarise(
+    mean_bpm = mean(bpm),
+    sem = sd(bpm) / sqrt(n()),
+    .groups = 'drop'
+  )
+
+# Create the line plot with error ribbons
+ggplot(genre_year_avg, aes(x = year, y = mean_bpm, color = genre_group, fill = genre_group)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2.5) +
+  geom_ribbon(aes(ymin = mean_bpm - sem, ymax = mean_bpm + sem), alpha = 0.2) +
+  labs(title = "Average BPM Over Time: Pop vs. All Other Genres")
+
+# --- T-test Analysis Code ---
+# Retrieve BPM values for POP songs in 2010 and 2019
+pop_bpm_2010 <- pop_genres %>% filter(year == 2010) %>% pull(bpm)
+pop_bpm_2019 <- pop_genres %>% filter(year == 2019) %>% pull(bpm)
+t.test(pop_bpm_2010, pop_bpm_2019)
+
+# Retrieve BPM values for ALL OTHER genres in 2010 and 2019
+other_bpm_2010 <- other_genres %>% filter(year == 2010) %>% pull(bpm)
+other_bpm_2019 <- other_genres %>% filter(year == 2019) %>% pull(bpm)
+t.test(other_bpm_2010, other_bpm_2019)
+
+
+```
+
+
+
