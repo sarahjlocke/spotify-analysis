@@ -20,7 +20,7 @@ Analyzed 600+ top songs from a Kaggle dataset (2010–2019) to explore tempo dif
 1. Clone this repository:
    ```bash
    git clone https://github.com/YOUR-USERNAME/spotify-analysis.git
-Open the R project or .Rmd file in RStudio```
+Open the R project or .Rmd file in RStudio
 
 Run the code chunks to reproduce analysis and figures
 
